@@ -1,110 +1,98 @@
-require 'pry' 
+require 'pry'
 require 'pry-byebug'
-class Node
-  attr_accessor :data, :left, :right
-  include Comparable
-  
-  def initialize(data = nil, left = nil, right = nil)
-    @data = data
-    @left = left
-    @right = right
-  end
-  
-  def <=>(other_node)
-    if other_node.nil?
-      return -1
-    else
-      @data <=> other_node.data
-    end
-  end
-end
+require_relative 'node'
+# This class is used for manipulating and creating a binary search tree.
 class Tree
   attr_reader :root
-  
+
   def initialize(array)
     @root = prepare_build_tree(array)
   end
-  
+
   def prepare_build_tree(array)
     array.sort!.uniq!
-    puts "#{array}"
     root = build_tree(array)
-    return root
+    root
   end
-  
-  def build_tree(array) #[1, 3, 4, 8, 9, 23, 55]
+
+  def build_tree(array)
     start = 0
-    last = array.size-1
-    mid = array.size/2
+    last = array.size - 1
+    mid = array.size / 2
     root = Node.new(array[mid])
     return root if array.size == 1
     return nil if array.size == 0
-    
-    root.left = build_tree(array[start..mid-1])
-    root.right = build_tree(array[mid+1..last])
+
+    root.left = build_tree(array[start..mid - 1])
+    root.right = build_tree(array[mid + 1..last])
     root
   end
-  
+
   def find(value)
     level_order do |n|
       return n if n.data == value
     end
   end
-  
-  def rebalance! (node=@root)
+
+  def rebalance!
     array = []
-    inorder_traversal {|n| array << n.data}
+    inorder_traversal { |n| array << n.data }
     @root = prepare_build_tree(array)
   end
-  
-  def balanced_tree?(node=@root)
+
+  def balanced_tree?(node = @root)
     a = count_tree(node.left)
     b = count_tree(node.right)
-    if (-1..1) === (a-b)
-      true
-    else
-      false
-    end
+    (-1..1) === (a - b)
   end
-  
+
   def count_tree(node)
     a = 0
-    level_order([node]) {|n| a += 1}
+    level_order(node) { a += 1 }
     a
   end
   
-  def delete(value)
-    node= find(value)
+  def delete(value) #First if leaf, then if one child, last if two children. Two => recursion
+    node = find(value)
     parent = find_parent(node)
     if node.left.nil? && node.right.nil?
+      delete_leaf(node, parent)
+    elsif node.left.nil?
+      delete_node_one_child(node, node.right, parent)
+    elsif node.right.nil?
+      delete_node_one_child(node, node.left, parent)
+    else # Both left and right exist. Use recursion.
+      replace_node = inorder_traversal(node.right) { |n| break n } #Finds node to replace with
+      delete(replace_node.data) #Enter recursion for found node, which needs to be deleted first.
+      node.data = replace_node.data
+    end
+  end
+
+  def delete_leaf(node, parent)
       if node.data < parent.data
         parent.left = nil
       else
         parent.right = nil
       end
-    elsif node.left.nil?
-      if node.data < parent.data
-        parent.left = node.right
+  end
+
+  def delete_node_one_child(node, child, parent)
+    if node.data < parent.data
+        parent.left = child
       else
-        parent.right = node.right
+        parent.right = child
       end
-    elsif node.right.nil?
-      if node.data < parent.data 
-        parent.left = node.left
-      else
-        parent.right = node.left
-      end
-    else #both left and right exist. Use recursion.
-      replace_node = inorder_traversal(node.right) {|n| break n} #gives first inorder in right rubtree. 
-      delete(replace_node.data)
-      node.data = replace_node.data
+  end
+
+  def level(node)
+    level = 0
+    while node != @root
+      level += 1
+      node = find_parent(node)
     end
+    level
   end
-  
-  def find_next_inorder(node)
-    inorder_traversal(node) {|n| return n}
-  end
-  
+
   def find_parent(node)
     level_order do |n|
       if n.left == node || n.right == node
@@ -112,12 +100,11 @@ class Tree
       end
     end
   end
-        #check if leaf.
-  
+
   def insert(value)
     new_node = Node.new(value)
     root = @root
-    while (true)
+    loop do
       if value < root.data
         if root.left.nil?
           root.left = new_node
@@ -134,31 +121,22 @@ class Tree
     end
   end
 
-  def level_order(array = [@root], level = 0, &block)
-    return nil if array.empty?
-
-    next_array = []
-    string = ''
-    array.each do |root|
-      if block_given?
-        yield(root, level)
-      else
-        string += "#{root.data.to_s.ljust(5)} "
-      end
-      next_array << root.left if root.left
-      next_array << root.right if root.right
+  def level_order(node = @root, &block)
+     
+    queue = [node]
+    array = []
+    until queue.size == 0 
+      temp = queue.shift
+      yield temp if block_given?
+      array << temp.data
+      queue << temp.left if temp.left != nil
+      queue << temp.right if temp.right != nil
     end
-    unless block_given?
-      puts string.center(111, ' ')
-      puts
-    end
-    level += 1
-    level_order(next_array, level, &block)
+    return array if !block_given?
   end
-
   def inorder_traversal(root = @root, array = [], &block)
     return nil if root.nil?
-    
+
     inorder_traversal(root.left, array, &block)
     if block_given?
       yield root
@@ -171,7 +149,7 @@ class Tree
 
   def preorder_traversal(root = @root, array = [], &block)
     return nil if root.nil?
-    
+
     if block_given?
       yield root
     else
@@ -194,10 +172,6 @@ class Tree
     end
   end
 
-  def depth(node)
-    level_order { |n, l| return l if n == node }
-  end
-
   def last_node(node = @root)
     node = nil
     level_order{ |n| node = n }
@@ -206,12 +180,13 @@ class Tree
   
   def to_s
     prev_n, prev_l, string, array = nil, nil, '', []
-    level_order do |n, l|
+    level_order do |n|
+      l = level(n)
       if prev_l != l
         array << string
         string = ''
       end
-      if depth(n) == depth(prev_n) && find_parent(n) == find_parent(prev_n)
+      if level(n) == level(prev_n) && find_parent(n) == find_parent(prev_n)
         string += '-'
       else
         string += ' '
@@ -222,12 +197,33 @@ class Tree
     end
     array.each { |a| puts a.center(50) }
   end
+  def print_all_order
+    print level_order
+    puts
+    print preorder_traversal
+    puts
+    print inorder_traversal
+    puts
+    print postorder_traversal
+    puts
+  end
+  # Copied from Run After's binary search program
+  def pretty_print(node = root, prefix="", is_left = true)
+    pretty_print(node.right, "#{prefix}#{is_left ? "│   " : "    "}", false) if node.right
+    puts "#{prefix}#{is_left ? "└── " : "┌── "}#{node.data.to_s}"
+    pretty_print(node.left, "#{prefix}#{is_left ? "    " : "│   "}", true) if node.left
+  end
 end
-i = 1
-array = []
-15.times do
-  array << i
-  i += 1
-end
+array = Array.new(15) { rand(1..100) }
+print array
 tree = Tree.new(array)
-tree.to_s
+puts "\nBalanced? #{tree.balanced_tree?}"
+tree.pretty_print
+tree.print_all_order
+array = Array.new(10) { rand(200..300)}
+array.each { |el| tree.insert(el) }
+tree.pretty_print
+puts "\nBalanced? #{tree.balanced_tree?}"
+tree.rebalance!
+tree.pretty_print
+puts "\nBalanced? #{tree.balanced_tree?}"
